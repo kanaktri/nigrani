@@ -25,11 +25,18 @@ app = FastAPI(
     version="1.0.0",
 )
 
-# Dev convenience: for the hackathon/demo, tables are created directly from
-# the models on startup. Production uses Alembic migrations instead
-# (see migrations/ and the README) so schema changes are tracked and
-# reversible - this call is a no-op once Alembic has already created them.
-Base.metadata.create_all(bind=engine)
+# Dev convenience: for LOCAL SQLite development, tables are created
+# directly from the models on startup, so `uvicorn app.main:app --reload`
+# works immediately with no extra setup step. This is deliberately
+# SQLite-only: mixing this with Alembic on a real database causes exactly
+# the failure this comment used to hand-wave away as "a no-op" - if this
+# ever runs even once against a fresh Postgres database before Alembic
+# gets a chance to, Alembic's own migration then fails with
+# "relation already exists", because the tables exist but Alembic's own
+# version-tracking row was never written. Production (Postgres) must
+# rely on `alembic upgrade head` alone, every time, with this skipped.
+if settings.DATABASE_URL.startswith("sqlite"):
+    Base.metadata.create_all(bind=engine)
 
 # CORS_ORIGINS is read directly from settings, independent of DEBUG - the
 # previous version tied this to DEBUG and ended up blocking every origin

@@ -25,7 +25,15 @@ DEMO_PASSWORD = "Password123!"
 
 
 def run():
-    Base.metadata.create_all(bind=engine)
+    # Same guard as app/main.py: only auto-create tables for local SQLite
+    # convenience. On Postgres, Alembic (`alembic upgrade head`, which
+    # runs before this script in the Start Command) owns schema creation
+    # exclusively - this script should never also try to create tables
+    # against a real database.
+    from app.core.config import settings
+    if settings.DATABASE_URL.startswith("sqlite"):
+        Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
 
     if db.query(User).count() > 0:
