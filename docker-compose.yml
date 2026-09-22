@@ -1,0 +1,88 @@
+version: "3.9"
+
+# DoSJE Setu (the institute/beneficiary web app, in ../setu/) is
+# deliberately NOT containerized here - it's a single static HTML file
+# with no build step, meant to be served by literally anything (or
+# opened directly). See setu/index.html and the README's "Setu" section.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: dosje
+      POSTGRES_USER: dosje
+      POSTGRES_PASSWORD: dosje_dev
+    ports:
+      - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dosje"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    ports:
+      - "9000:9000"   # S3 API
+      - "9001:9001"   # Web console
+    volumes:
+      - minio_data:/data
+
+  backend:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://dosje:dosje_dev@db:5432/dosje
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-change-me-in-production}
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: evidence-bucket
+      DEBUG: "false"
+    ports:
+      - "8000:8000"
+
+  # Runs once, seeds demo accounts + sample data, then exits - `docker-compose run seed`
+  seed:
+    build: ./backend
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://dosje:dosje_dev@db:5432/dosje
+      STORAGE_BACKEND: s3
+      S3_ENDPOINT_URL: http://minio:9000
+      S3_ACCESS_KEY: minioadmin
+      S3_SECRET_KEY: minioadmin
+      S3_BUCKET: evidence-bucket
+    entrypoint: ["python", "-m", "app.seed.seed_data"]
+    profiles: ["seed"]  # only runs when explicitly invoked, never on a plain `up`
+
+  dashboard:
+    build: ./dashboard
+    ports:
+      - "5173:80"
+    depends_on:
+      - backend
+
+  # Lightweight DB browser so judges/teammates can see the schema and rows
+  # live during the demo without a separate Postgres client install.
+  adminer:
+    image: adminer:latest
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
+volumes:
+  dbdata:
+  minio_data:

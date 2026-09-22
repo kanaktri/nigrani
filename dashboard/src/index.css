@@ -1,0 +1,19 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  background-color: theme("colors.paper");
+  color: theme("colors.ink");
+}
+
+/* Leaflet needs an explicit height on its container - handled per-instance
+   in MapView.jsx, this just keeps the default marker icons from
+   404'ing when bundled (react-leaflet's known Vite issue). */
+.leaflet-container {
+  font-family: theme("fontFamily.sans");
+}
